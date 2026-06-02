@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card" style="max-width: 480px; margin: 2rem auto;">
+    <div style="text-align:center; margin-bottom:1rem;">
+        <h2>Welcome to WineShop</h2>
+        <p>Login to manage shop prices, stock, and daily sales.</p>
+    </div>
+    <form method="post">
+        <div class="row">
+            <div class="col-sm-12">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" required>
+            </div>
+            <div class="col-sm-12">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required>
+            </div>
+        </div>
+        <div class="form-actions">
+            <button type="submit">Login</button>
+            <button type="reset">Clear</button>
+        </div>
+    </form>
+</section>
+{% endblock %}

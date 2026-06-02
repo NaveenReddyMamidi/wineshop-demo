@@ -1,0 +1,233 @@
+{% extends "base.html" %}
+{% block content %}
+<section>
+    <h2>{{ shop.name }} - Daily Stock</h2>
+    <p>{{ shop.location or "No address added" }}</p>
+
+    <div class="row">
+        <div class="col-sm-6">
+            <div class="card">
+                <h3>Select Date</h3>
+                <form method="get" id="date-form">
+                    <label for="date">Date</label>
+                    <input type="date" id="date" name="date" value="{{ selected_date.isoformat() }}" required>
+                    <div class="form-actions">
+                        <button type="submit">Load Date</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <div class="col-sm-6">
+            <div class="card">
+                <h3>Summary</h3>
+                <p><strong>Total Sales INR:</strong> <span id="total-sales">{{ total_sales|inr }}</span></p>
+                <p><strong>Closing inventory value:</strong> <span id="closing-value">{{ closing_inventory_value|inr }}</span></p>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>Stock sheet for {{ selected_date.strftime('%B %d, %Y') }}</h3>
+        <form method="post" id="daily-stock-form">
+            <input type="hidden" name="date" value="{{ selected_date.isoformat() }}">
+            <div class="table-responsive stock-sheet-wrap">
+                <table class="stock-sheet">
+                    <thead>
+                        <tr>
+                            <th>S.No</th>
+                            <th>Product</th>
+                            <th>Volume</th>
+                            <th>Opening</th>
+                            <th>Closing</th>
+                            <th>Sold</th>
+                            <th>Price INR</th>
+                            <th>Sales INR</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for row in daily_rows %}
+                        <tr data-price="{{ '%.2f'|format(row.price) }}">
+                            <td data-label="S.No">{{ loop.index }}</td>
+                            <td data-label="Product">{{ row.wine.name }}</td>
+                            <td data-label="Volume">{% if row.wine.ml %}{{ row.wine.ml }} ml{% else %}-{% endif %}</td>
+                            <td data-label="Opening">
+                                <input
+                                    class="sheet-input opening-input"
+                                    type="number"
+                                    name="opening_stock_{{ row.wine.id }}"
+                                    min="0"
+                                    step="1"
+                                    value="{{ row.opening_stock }}"
+                                    inputmode="numeric"
+                                    data-row="{{ loop.index0 }}"
+                                    data-col="opening"
+                                >
+                            </td>
+                            <td data-label="Closing">
+                                <input
+                                    class="sheet-input closing-input"
+                                    type="number"
+                                    name="closing_stock_{{ row.wine.id }}"
+                                    min="0"
+                                    step="1"
+                                    value="{{ row.closing_stock }}"
+                                    inputmode="numeric"
+                                    data-row="{{ loop.index0 }}"
+                                    data-col="closing"
+                                >
+                            </td>
+                            <td data-label="Sold" class="sold-cell">{{ row.sales_qty }}</td>
+                            <td data-label="Price INR">{{ row.price|inr }}</td>
+                            <td data-label="Sales INR" class="sales-cell">{{ row.sales_amount|inr }}</td>
+                        </tr>
+                    {% else %}
+                        <tr><td colspan="8">No products added to this shop yet.</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="form-actions sheet-actions">
+                <button type="submit">Save sheet</button>
+                <button type="reset">Reset changes</button>
+            </div>
+        </form>
+    </div>
+</section>
+
+<style>
+    .stock-sheet-wrap {
+        max-height: min(70vh, 720px);
+        overflow-x: auto;
+        overflow-y: auto;
+    }
+
+    .stock-sheet {
+        min-width: 900px;
+        width: max-content;
+        table-layout: fixed;
+    }
+
+    .stock-sheet th:first-child,
+    .stock-sheet td:first-child {
+        width: 4.5rem;
+        text-align: center;
+    }
+
+    .stock-sheet th:nth-child(2),
+    .stock-sheet td:nth-child(2) {
+        min-width: 16rem;
+    }
+
+    .stock-sheet th,
+    .stock-sheet td {
+        white-space: nowrap;
+        padding: 0.75rem 0.8rem;
+    }
+
+    .stock-sheet .sheet-input {
+        width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+        padding: 0.45rem 0.55rem;
+        text-align: right;
+    }
+
+    .stock-sheet td {
+        vertical-align: middle;
+    }
+
+    .sold-cell,
+    .sales-cell {
+        font-weight: 800;
+    }
+
+    .sheet-actions {
+        margin-top: 1rem;
+    }
+</style>
+
+<script>
+const moneyFormatter = new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    minimumFractionDigits: 2
+});
+
+const sheetForm = document.getElementById('daily-stock-form');
+const rows = Array.from(document.querySelectorAll('.stock-sheet tbody tr[data-price]'));
+
+function cleanStockValue(input) {
+    const value = parseInt(input.value, 10);
+    return Number.isFinite(value) && value >= 0 ? value : 0;
+}
+
+function updateRow(row) {
+    const openingInput = row.querySelector('.opening-input');
+    const closingInput = row.querySelector('.closing-input');
+    const price = parseFloat(row.dataset.price) || 0;
+    const opening = cleanStockValue(openingInput);
+    const closing = cleanStockValue(closingInput);
+    const sold = Math.max(opening - closing, 0);
+    const sales = sold * price;
+
+    row.querySelector('.sold-cell').textContent = sold;
+    row.querySelector('.sales-cell').textContent = moneyFormatter.format(sales);
+}
+
+function updateSummary() {
+    let totalSales = 0;
+    let closingValue = 0;
+
+    rows.forEach(row => {
+        const price = parseFloat(row.dataset.price) || 0;
+        const opening = cleanStockValue(row.querySelector('.opening-input'));
+        const closing = cleanStockValue(row.querySelector('.closing-input'));
+        totalSales += Math.max(opening - closing, 0) * price;
+        closingValue += closing * price;
+    });
+
+    document.getElementById('total-sales').textContent = moneyFormatter.format(totalSales);
+    document.getElementById('closing-value').textContent = moneyFormatter.format(closingValue);
+}
+
+function updateSheet() {
+    rows.forEach(updateRow);
+    updateSummary();
+}
+
+function focusNextProduct(input) {
+    const currentRow = parseInt(input.dataset.row, 10);
+    const column = input.dataset.col;
+    let nextInput;
+
+    if (column === 'opening') {
+        nextInput = document.querySelector(`.sheet-input[data-row="${currentRow}"][data-col="closing"]`);
+    } else {
+        nextInput = document.querySelector(`.sheet-input[data-row="${currentRow + 1}"][data-col="opening"]`);
+    }
+
+    if (nextInput) {
+        nextInput.focus();
+        nextInput.select();
+    } else {
+        sheetForm.requestSubmit();
+    }
+}
+
+document.querySelectorAll('.sheet-input').forEach(input => {
+    input.addEventListener('input', updateSheet);
+    input.addEventListener('keydown', event => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            focusNextProduct(input);
+        }
+    });
+});
+
+sheetForm.addEventListener('reset', () => {
+    setTimeout(updateSheet, 0);
+});
+
+updateSheet();
+</script>
+{% endblock %}

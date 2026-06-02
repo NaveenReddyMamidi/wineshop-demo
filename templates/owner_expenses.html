@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block content %}
+<section>
+    <h2>Expenses</h2>
+    <div class="card" style="margin-bottom:1rem;">
+        <form method="get" action="{{ url_for('owner_expenses') }}">
+            <div class="row">
+                <div class="col-sm-6">
+                    <label for="shop_id">Select shop</label>
+                    <select id="shop_id" name="shop_id" required>
+                        <option value="">Choose shop</option>
+                        {% for shop in shops %}
+                            <option value="{{ shop.id }}" {% if selected_shop and selected_shop.id == shop.id %}selected{% endif %}>{{ shop.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-sm-6">
+                    <label for="date">Select date</label>
+                    <input type="date" id="date" name="date" value="{{ selected_date.isoformat() if selected_date else '' }}">
+                </div>
+            </div>
+            <div class="form-actions">
+                <button type="submit">Load expenses</button>
+                <a class="button secondary" href="{{ url_for('owner_expenses') }}">Clear</a>
+            </div>
+        </form>
+    </div>
+
+    {% if selected_shop %}
+        <div class="card" style="margin-bottom:1rem;">
+            <h3>Add expense entries for {{ selected_shop.name }} on {{ selected_date.strftime('%d %b %Y') }}</h3>
+            <form method="post" action="{{ url_for('owner_expenses') }}">
+                <input type="hidden" name="shop_id" value="{{ selected_shop.id }}">
+                <input type="hidden" name="date" value="{{ selected_date.isoformat() }}">
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Amount (INR)</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="expense-rows">
+                            {% for index in range(5) %}
+                                <tr>
+                                    <td>
+                                        <input type="hidden" name="row_index" value="{{ index }}">
+                                        <input type="text" name="name_{{ index }}" placeholder="Expense name" onkeydown="handleExpenseInputKeyDown(event)">
+                                    </td>
+                                    <td>
+                                        <input type="number" step="0.01" min="0" name="amount_{{ index }}" placeholder="0.00" onkeydown="handleExpenseInputKeyDown(event)">
+                                    </td>
+                                    <td>
+                                        <button type="button" class="secondary" onclick="removeExpenseRow(this)">Remove</button>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="form-actions">
+                    <button type="button" onclick="addExpenseRow()">Add row</button>
+                    <button type="submit">Save expenses</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="card">
+            <h3>Existing Expenses</h3>
+            <p><strong>Total expenses:</strong> {{ total_expenses|inr }}</p>
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Amount</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for expense in expenses %}
+                            <tr>
+                                <td data-label="Name">{{ expense.name }}</td>
+                                <td data-label="Amount">{{ expense.amount|inr }}</td>
+                                <td data-label="Action">
+                                    <form method="post" action="{{ url_for('delete_expense', expense_id=expense.id) }}" style="display:inline;">
+                                        <input type="hidden" name="date" value="{{ selected_date.isoformat() }}">
+                                        <button type="submit" class="secondary">Delete</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        {% else %}
+                            <tr><td colspan="3">No expenses recorded for this shop and date.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    {% else %}
+        <div class="card">
+            <p>Select a shop and date to manage daily expense entries.</p>
+        </div>
+    {% endif %}
+</section>
+
+<script>
+    let expenseRowIndex = 5;
+
+    function handleExpenseInputKeyDown(event) {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            const inputs = Array.from(document.querySelectorAll('#expense-rows input:not([type="hidden"])'));
+            const currentIndex = inputs.indexOf(event.target);
+            if (currentIndex !== -1 && currentIndex < inputs.length - 1) {
+                inputs[currentIndex + 1].focus();
+            } else {
+                addExpenseRow();
+                const newInputs = Array.from(document.querySelectorAll('#expense-rows input:not([type="hidden"])'));
+                if (newInputs.length > currentIndex + 1) {
+                    newInputs[currentIndex + 1].focus();
+                }
+            }
+        }
+    }
+
+    function addExpenseRow() {
+        const tbody = document.getElementById('expense-rows');
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>
+                <input type="hidden" name="row_index" value="${expenseRowIndex}">
+                <input type="text" name="name_${expenseRowIndex}" placeholder="Expense name" onkeydown="handleExpenseInputKeyDown(event)">
+            </td>
+            <td>
+                <input type="number" step="0.01" min="0" name="amount_${expenseRowIndex}" placeholder="0.00" onkeydown="handleExpenseInputKeyDown(event)">
+            </td>
+            <td>
+                <button type="button" class="secondary" onclick="removeExpenseRow(this)">Remove</button>
+            </td>
+        `;
+        tbody.appendChild(row);
+        expenseRowIndex += 1;
+    }
+
+    function removeExpenseRow(button) {
+        const row = button.closest('tr');
+        if (row) {
+            row.remove();
+        }
+    }
+</script>
+{% endblock %}

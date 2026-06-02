@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+{% block content %}
+<section>
+    <h2>Manage Prices - {{ shop.name }}</h2>
+    <p>{{ shop.location or "No address added" }}</p>
+
+    <!-- Keyboard shortcuts info -->
+    <div class="info-box" style="background-color: #e3f2fd; border-left: 4px solid #2196F3; padding: 1rem; margin-bottom: 1.5rem; border-radius: 4px;">
+        <strong>💡 Keyboard Shortcuts:</strong>
+        <ul style="margin: 0.5rem 0 0 1.5rem; padding-left: 0;">
+            <li><kbd>Enter</kbd> – Move to next product price</li>
+            <li><kbd>↓</kbd> – Move to next product price</li>
+            <li><kbd>↑</kbd> – Move to previous product price</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <h3>Price sheet</h3>
+        <form method="post" id="price-sheet-form">
+            <div class="table-responsive price-sheet-wrap">
+                <table class="price-sheet">
+                    <thead>
+                        <tr>
+                            <th>S.No</th>
+                            <th>Wine</th>
+                            <th>ML</th>
+                            <th>Price INR</th>
+                            <th>Delete</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for row in price_rows %}
+                        <tr>
+                            <td data-label="S.No">{{ loop.index }}</td>
+                            <td data-label="Wine">{{ row.wine.name }}</td>
+                            <td data-label="ML">{{ row.wine.ml or "-" }}</td>
+                            <td data-label="Price INR">
+                                <input
+                                    class="sheet-input price-input"
+                                    type="number"
+                                    name="price_{{ row.wine.id }}"
+                                    min="0"
+                                    step="0.01"
+                                    value="{{ '%.2f'|format(row.price) }}"
+                                    inputmode="decimal"
+                                    data-row="{{ loop.index0 }}"
+                                >
+                            </td>
+                            <td data-label="Delete">
+                                {% if row.price_record %}
+                                <button
+                                    type="submit"
+                                    formaction="{{ url_for('owner_delete_price', price_id=row.price_record.id) }}"
+                                    formmethod="post"
+                                    onclick="return confirm('Remove this product from the price list?');"
+                                >
+                                    Delete
+                                </button>
+                                {% else %}
+                                <span>No price</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% else %}
+                        <tr><td colspan="5">No products added to this shop yet.</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="form-actions sheet-actions">
+                <button type="submit">Save sheet</button>
+                <button type="reset">Reset changes</button>
+            </div>
+        </form>
+    </div>
+</section>
+
+<style>
+    .price-sheet-wrap {
+        max-height: min(70vh, 720px);
+    }
+
+    .price-sheet {
+        min-width: 760px;
+    }
+
+    .price-sheet th:first-child,
+    .price-sheet td:first-child {
+        width: 4.5rem;
+        text-align: center;
+    }
+
+    .price-sheet th:nth-child(2),
+    .price-sheet td:nth-child(2) {
+        min-width: 16rem;
+    }
+
+    .price-sheet .sheet-input {
+        width: 8rem;
+        min-height: 2.25rem;
+        padding: 0.45rem 0.55rem;
+        text-align: right;
+        border: 2px solid #ddd;
+        border-radius: 4px;
+        transition: all 0.2s ease;
+        font-family: monospace;
+        font-size: 1rem;
+    }
+
+    .price-sheet .sheet-input:focus {
+        border-color: #4CAF50;
+        box-shadow: 0 0 8px rgba(76, 175, 80, 0.3);
+        background-color: #fffef5;
+    }
+
+    .price-sheet .sheet-input:hover:not(:focus) {
+        border-color: #bbb;
+        background-color: #fafaf8;
+    }
+
+    .price-sheet td {
+        vertical-align: middle;
+    }
+
+    .sheet-actions {
+        margin-top: 1rem;
+    }
+
+    /* Keyboard navigation indicator */
+    .price-sheet tbody tr:hover {
+        background-color: #f9f9f9;
+    }
+
+    .price-sheet-wrap::-webkit-scrollbar {
+        width: 8px;
+    }
+
+    .price-sheet-wrap::-webkit-scrollbar-track {
+        background: #f1f1f1;
+    }
+
+    .price-sheet-wrap::-webkit-scrollbar-thumb {
+        background: #888;
+        border-radius: 4px;
+    }
+
+    .price-sheet-wrap::-webkit-scrollbar-thumb:hover {
+        background: #555;
+    }
+</style>
+
+<script>
+const priceForm = document.getElementById('price-sheet-form');
+const priceInputs = document.querySelectorAll('.price-input');
+
+function focusNextPrice(input) {
+    const currentRow = parseInt(input.dataset.row, 10);
+    const nextInput = document.querySelector(`.price-input[data-row="${currentRow + 1}"]`);
+
+    if (nextInput) {
+        nextInput.focus();
+        nextInput.select();
+    } else {
+        // Auto-save form when reaching the last product
+        priceForm.requestSubmit();
+    }
+}
+
+function focusPreviousPrice(input) {
+    const currentRow = parseInt(input.dataset.row, 10);
+    if (currentRow > 0) {
+        const prevInput = document.querySelector(`.price-input[data-row="${currentRow - 1}"]`);
+        if (prevInput) {
+            prevInput.focus();
+            prevInput.select();
+        }
+    }
+}
+
+priceInputs.forEach((input, index) => {
+    input.addEventListener('keydown', event => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            focusNextPrice(input);
+        } else if (event.key === 'Shift' && event.key === 'Enter') {
+            // Shift+Enter to go to previous row (optional)
+            event.preventDefault();
+            focusPreviousPrice(input);
+        } else if (event.key === 'ArrowDown') {
+            // Arrow down to move to next row
+            event.preventDefault();
+            focusNextPrice(input);
+        } else if (event.key === 'ArrowUp') {
+            // Arrow up to move to previous row
+            event.preventDefault();
+            focusPreviousPrice(input);
+        }
+    });
+
+    // First input gets focus on load
+    if (index === 0) {
+        input.focus();
+        input.select();
+    }
+});
+
+// Auto-save on value change with visual feedback
+priceInputs.forEach(input => {
+    input.addEventListener('change', () => {
+        input.style.background = '#e8f5e9';
+        setTimeout(() => {
+            input.style.background = '';
+        }, 500);
+    });
+});
+</script>
+{% endblock %}

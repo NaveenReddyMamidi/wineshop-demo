@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block content %}
+<section>
+    <h2>Add Worker</h2>
+    <div class="row">
+        <div class="col-sm-6">
+            <div class="card">
+                <form action="{{ url_for('owner_add_worker') }}" method="post">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" name="username" required>
+
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" required>
+
+                    <label for="shop_ids">Shops</label>
+                    <select id="shop_ids" name="shop_ids" multiple size="5" required>
+                        {% for shop in shops %}
+                            <option value="{{ shop.id }}">{{ shop.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <small>Hold Ctrl (Windows) or Cmd (Mac) to select multiple shops.</small>
+
+                    <div class="form-actions">
+                        <button type="submit">Create worker</button>
+                        <button type="reset">Clear</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <h3>Workers</h3>
+    <div class="table-responsive">
+        <table>
+            <thead>
+                <tr>
+                    <th>Username</th>
+                    <th>Assigned Shops</th>
+                    <th>Update Shops</th>
+                    <th>Reset Password</th>
+                    <th>Delete</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for worker in all_workers %}
+                <tr>
+                    <td data-label="Username">{{ worker.username }}</td>
+                    <td data-label="Assigned Shops">
+                        {% for shop in worker.shops %}
+                            {{ shop.name }}{% if not loop.last %}, {% endif %}
+                        {% else %}
+                            None
+                        {% endfor %}
+                    </td>
+                    <td data-label="Update Shops">
+                        <form action="{{ url_for('owner_update_worker_shops', user_id=worker.id) }}" method="post">
+                            <select name="shop_ids" multiple size="3" style="min-width:12rem;">
+                                {% for shop in shops %}
+                                    <option value="{{ shop.id }}" {% if shop in worker.shops %}selected{% endif %}>{{ shop.name }}</option>
+                                {% endfor %}
+                            </select>
+                            <button type="submit">Save</button>
+                        </form>
+                    </td>
+                    <td data-label="Reset Password">
+                        <form action="{{ url_for('owner_update_worker_password', user_id=worker.id) }}" method="post">
+                            <input type="password" name="new_password" minlength="6" placeholder="New password" required>
+                            <input type="password" name="confirm_password" minlength="6" placeholder="Confirm" required>
+                            <button type="submit">Update</button>
+                            <button type="reset">Clear</button>
+                        </form>
+                    </td>
+                    <td data-label="Delete">
+                        <form action="{{ url_for('owner_delete_worker', user_id=worker.id) }}" method="post" onsubmit="return confirm('Delete this worker user?');">
+                            <button type="submit">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+            {% else %}
+                <tr><td colspan="4">No workers added yet.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

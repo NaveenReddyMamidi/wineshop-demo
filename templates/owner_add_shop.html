@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block content %}
+<section>
+    <h2>Add Shop</h2>
+    <div class="row">
+        <div class="col-sm-6">
+            <div class="card">
+                <form method="post">
+                    <label for="name">Shop name</label>
+                    <input type="text" id="name" name="name" required>
+
+                    <label for="location">Address</label>
+                    <textarea id="location" name="location" rows="4"></textarea>
+
+                    <div class="form-actions">
+                        <button type="submit">Save shop</button>
+                        <button type="reset">Clear</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <h3>Existing Shops</h3>
+    <div class="table-responsive">
+        <table>
+            <thead>
+                <tr>
+                    <th>Shop</th>
+                    <th>Address</th>
+                    <th>Delete</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for shop in shops %}
+                <tr>
+                    <td data-label="Shop">{{ shop.name }}</td>
+                    <td data-label="Address">{{ shop.location or "-" }}</td>
+                    <td data-label="Delete">
+                        <form action="{{ url_for('owner_delete_shop', shop_id=shop.id) }}" method="post" onsubmit="return confirm('Delete this shop and all related wines, prices, stock, and worker assignments?');">
+                            <button type="submit">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+            {% else %}
+                <tr><td colspan="3">No shops added yet.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

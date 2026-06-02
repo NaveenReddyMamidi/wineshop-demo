@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block content %}
+<section>
+    <h2>Sales Report</h2>
+    <div class="card" style="margin-bottom:1rem;">
+        <form method="get" action="{{ url_for(reports_endpoint if reports_endpoint else 'owner_reports') }}">
+            <div class="row">
+                <div class="col-sm-6">
+                    <label for="shop_id">Select shop</label>
+                    <select id="shop_id" name="shop_id" required>
+                        <option value="">Choose shop</option>
+                        {% for shop in shops %}
+                            <option value="{{ shop.id }}" {% if selected_shop and selected_shop.id == shop.id %}selected{% endif %}>
+                                {{ shop.name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-sm-6">
+                    <label for="date">Select date</label>
+                    <input type="date" id="date" name="date" value="{{ selected_date.isoformat() if selected_date else '' }}">
+                </div>
+            </div>
+            <div class="form-actions">
+                <button type="submit">View report</button>
+                <a class="button secondary" href="{{ url_for(reports_endpoint if reports_endpoint else 'owner_reports') }}">Clear</a>
+                {% if selected_shop and current_user.role == 'owner' %}
+                    <a class="button" href="{{ url_for('owner_download_report', shop_id=selected_shop.id, date=selected_date.isoformat() if selected_date else '') }}">Download CSV</a>
+                    <a class="button" href="{{ url_for('owner_download_report_pdf', shop_id=selected_shop.id, date=selected_date.isoformat() if selected_date else '') }}">Download PDF</a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+
+    {% if report %}
+        <div class="metric-grid">
+            <div class="card metric-card">
+                <strong>Total Sales INR</strong>
+                <span>{{ report.total_sales|inr }}</span>
+            </div>
+            <div class="card metric-card">
+                <strong>Units Sold</strong>
+                <span>{{ report.total_units }}</span>
+            </div>
+            <div class="card metric-card">
+                <strong>Opening Qty</strong>
+                <span>{{ report.total_opening }}</span>
+            </div>
+            <div class="card metric-card">
+                <strong>Closing Qty</strong>
+                <span>{{ report.total_closing }}</span>
+            </div>
+            <div class="card metric-card">
+                <strong>Total Expenses</strong>
+                <span>{{ report.total_expenses|inr }}</span>
+            </div>
+            <div class="card metric-card">
+                <strong>Net Sales</strong>
+                <span>{{ report.net_sales|inr }}</span>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-sm-6">
+                <div class="card">
+                    <h3>{{ report.shop.name }}</h3>
+                    <p>{{ report.shop.location or "No address added" }}</p>
+                    <p><strong>Date:</strong> {{ report.date }}</p>
+                    <p><strong>Opening value:</strong> {{ report.opening_value|inr }}</p>
+                    <p><strong>Closing value:</strong> {{ report.closing_value|inr }}</p>
+                </div>
+            </div>
+        </div>
+
+        <h3>Product Sales</h3>
+        <div class="table-responsive">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Wine</th>
+                        <th>ML</th>
+                        <th>Opening</th>
+                        <th>Closing</th>
+                        <th>Sold</th>
+                        <th>Price INR</th>
+                        <th>Sales INR</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for entry in report.entries %}
+                    <tr>
+                        <td data-label="Wine">{{ entry.wine.name }}</td>
+                        <td data-label="ML">{{ entry.wine.ml or "-" }}</td>
+                        <td data-label="Opening">{{ entry.opening_stock }}</td>
+                        <td data-label="Closing">{{ entry.closing_stock }}</td>
+                        <td data-label="Sold">{{ entry.sales_qty }}</td>
+                        <td data-label="Price INR">{{ entry.price|inr }}</td>
+                        <td data-label="Sales INR">{{ entry.sales_amount|inr }}</td>
+                    </tr>
+                {% else %}
+                    <tr><td colspan="7">No sales entries found for today.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <h3>Expenses</h3>
+        <div class="table-responsive">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Amount INR</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for expense in report.expense_entries %}
+                        <tr>
+                            <td data-label="Name">{{ expense.name }}</td>
+                            <td data-label="Amount INR">{{ expense.amount|inr }}</td>
+                        </tr>
+                    {% else %}
+                        <tr><td colspan="2">No expenses recorded for this date.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% endif %}
+</section>
+{% endblock %}
