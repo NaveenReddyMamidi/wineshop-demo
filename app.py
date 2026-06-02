@@ -17,18 +17,7 @@ from reportlab.lib.units import inch
 
 
 
-app = Flask(__name__)
-app.config.from_object(Config)
 
-db.init_app(app)
-
-with app.app_context():
-    db.create_all()
-    print("Database tables created")
-
-login_manager = LoginManager()
-login_manager.login_view = "login"
-login_manager.init_app(app)
 
 
 @login_manager.user_loader
@@ -1701,6 +1690,15 @@ def create_shop():
     flash("Shop created successfully", "success")
     return redirect(url_for("owner_add_shop"))
 
+
+app = Flask(__name__)
+app.config.from_object(Config)
+
+db.init_app(app)
+
+login_manager = LoginManager()
+login_manager.login_view = "login"
+login_manager.init_app(app)
 
 if __name__ == "__main__":
     app.run(debug=True)
