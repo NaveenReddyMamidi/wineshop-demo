@@ -6,7 +6,7 @@ basedir = os.path.abspath(os.path.dirname(__file__))
 load_dotenv(Path(basedir) / ".env")
 
 class Config:
-    SECRET_KEY = os.environ.get("SECRET_KEY", "change-this-secret")
+    SECRET_KEY = os.environ.get("SECRET_KEY", "my_wine_shop_secret_key")
     database_url = os.environ.get("DATABASE_URL")
     if database_url and database_url.startswith("postgresql://"):
         database_url = database_url.replace("postgresql://", "postgresql+pg8000://", 1)
