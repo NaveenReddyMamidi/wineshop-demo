@@ -11,5 +11,5 @@ class Config:
     if database_url and database_url.startswith("postgresql://"):
         database_url = database_url.replace("postgresql://", "postgresql+pg8000://", 1)
 
-    SQLALCHEMY_DATABASE_URI = database_url or "postgresql://appuser:K4T3HkbtFgxGTYPLxTdwUta9k92UbMDX@dpg-d8f3jfl53gjs739l6ptg-a/wineshop_db?sslmode=require"
+    SQLALCHEMY_DATABASE_URI = database_url or "postgresql+pg8000://appuser:mywineshop999@localhost:5432/wineshopdb"
     SQLALCHEMY_TRACK_MODIFICATIONS = False
