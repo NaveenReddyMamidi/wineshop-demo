@@ -15,10 +15,17 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.units import inch
 
+
+
 app = Flask(__name__)
 app.config.from_object(Config)
 
 db.init_app(app)
+
+with app.app_context():
+    db.create_all()
+    print("Database tables created")
+
 login_manager = LoginManager()
 login_manager.login_view = "login"
 login_manager.init_app(app)
