@@ -1,6 +1,7 @@
 import csv
 from io import StringIO, BytesIO
 from types import SimpleNamespace
+from config import Config
 
 from flask import Flask, Response, render_template, redirect, url_for, request, flash
 from flask_sqlalchemy import SQLAlchemy
@@ -8,7 +9,6 @@ from flask_login import LoginManager, login_user, login_required, logout_user, c
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import date, timedelta, datetime
 from models import db, User, Shop, Wine, WinePrice, DailyStock, ParcelEntry, Expense
-from config import Config
 from reportlab.lib.pagesizes import letter, A4
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -17,7 +17,14 @@ from reportlab.lib.units import inch
 
 
 
+app = Flask(__name__)
+app.config.from_object(Config)
 
+db.init_app(app)
+
+login_manager = LoginManager()
+login_manager.login_view = "login"
+login_manager.init_app(app)
 
 
 @login_manager.user_loader
@@ -1690,15 +1697,6 @@ def create_shop():
     flash("Shop created successfully", "success")
     return redirect(url_for("owner_add_shop"))
 
-
-app = Flask(__name__)
-app.config.from_object(Config)
-
-db.init_app(app)
-
-login_manager = LoginManager()
-login_manager.login_view = "login"
-login_manager.init_app(app)
 
 if __name__ == "__main__":
     app.run(debug=True)
