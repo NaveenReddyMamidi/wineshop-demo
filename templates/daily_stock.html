@@ -38,6 +38,8 @@
                             <th>Product</th>
                             <th>Volume</th>
                             <th>Opening</th>
+                            <th>Receipt</th>
+                            <th>Total Stock</th>
                             <th>Closing</th>
                             <th>Sold</th>
                             <th>Price INR</th>
@@ -61,8 +63,23 @@
                                     inputmode="numeric"
                                     data-row="{{ loop.index0 }}"
                                     data-col="opening"
+                                    {% if current_user.role != 'owner' %}readonly{% endif %}
                                 >
                             </td>
+                            <td data-label="Receipt">
+                                <input
+                                    class="sheet-input receipt-input"
+                                    type="number"
+                                    name="receipt_{{ row.wine.id }}"
+                                    min="0"
+                                    step="1"
+                                    value="{{ row.receipt }}"
+                                    inputmode="numeric"
+                                    data-row="{{ loop.index0 }}"
+                                    data-col="receipt"
+                                >
+                            </td>
+                            <td data-label="Total Stock" class="total-stock-cell">{{ row.total_stock }}</td>
                             <td data-label="Closing">
                                 <input
                                     class="sheet-input closing-input"
@@ -81,7 +98,7 @@
                             <td data-label="Sales INR" class="sales-cell">{{ row.sales_amount|inr }}</td>
                         </tr>
                     {% else %}
-                        <tr><td colspan="8">No products added to this shop yet.</td></tr>
+                        <tr><td colspan="10">No products added to this shop yet.</td></tr>
                     {% endfor %}
                     </tbody>
                 </table>
@@ -102,9 +119,9 @@
     }
 
     .stock-sheet {
-        min-width: 900px;
-        width: max-content;
-        table-layout: fixed;
+        width: auto;
+        min-width: 0;
+        table-layout: auto;
     }
 
     .stock-sheet th:first-child,
@@ -115,13 +132,52 @@
 
     .stock-sheet th:nth-child(2),
     .stock-sheet td:nth-child(2) {
-        min-width: 16rem;
+        width: 9rem;
+        max-width: 9rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .stock-sheet th:nth-child(3),
+    .stock-sheet td:nth-child(3) {
+        width: 3.5rem;
+        max-width: 3.5rem;
+        text-align: center;
+        padding-left: 0.15rem;
+    }
+
+    .stock-sheet th:nth-child(4),
+    .stock-sheet td:nth-child(4),
+    .stock-sheet th:nth-child(5),
+    .stock-sheet td:nth-child(5),
+    .stock-sheet th:nth-child(7),
+    .stock-sheet td:nth-child(7),
+    .stock-sheet th:nth-child(8),
+    .stock-sheet td:nth-child(8) {
+        width: 5rem;
+        text-align: right;
+    }
+
+    .stock-sheet th:nth-child(6),
+    .stock-sheet td:nth-child(6) {
+        width: 6rem;
+        text-align: right;
+    }
+
+    .stock-sheet th:nth-child(9),
+    .stock-sheet td:nth-child(9),
+    .stock-sheet th:nth-child(10),
+    .stock-sheet td:nth-child(10) {
+        width: 6.5rem;
+        text-align: right;
     }
 
     .stock-sheet th,
     .stock-sheet td {
         white-space: nowrap;
         padding: 0.75rem 0.8rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
     .stock-sheet .sheet-input {
@@ -157,19 +213,26 @@ const sheetForm = document.getElementById('daily-stock-form');
 const rows = Array.from(document.querySelectorAll('.stock-sheet tbody tr[data-price]'));
 
 function cleanStockValue(input) {
+    if (!input) {
+        return 0;
+    }
     const value = parseInt(input.value, 10);
     return Number.isFinite(value) && value >= 0 ? value : 0;
 }
 
 function updateRow(row) {
     const openingInput = row.querySelector('.opening-input');
+    const receiptInput = row.querySelector('.receipt-input');
     const closingInput = row.querySelector('.closing-input');
     const price = parseFloat(row.dataset.price) || 0;
     const opening = cleanStockValue(openingInput);
+    const receipt = cleanStockValue(receiptInput);
     const closing = cleanStockValue(closingInput);
-    const sold = Math.max(opening - closing, 0);
+    const totalStock = opening + receipt;
+    const sold = Math.max(totalStock - closing, 0);
     const sales = sold * price;
 
+    row.querySelector('.total-stock-cell').textContent = totalStock;
     row.querySelector('.sold-cell').textContent = sold;
     row.querySelector('.sales-cell').textContent = moneyFormatter.format(sales);
 }
@@ -181,8 +244,10 @@ function updateSummary() {
     rows.forEach(row => {
         const price = parseFloat(row.dataset.price) || 0;
         const opening = cleanStockValue(row.querySelector('.opening-input'));
+        const receipt = cleanStockValue(row.querySelector('.receipt-input'));
         const closing = cleanStockValue(row.querySelector('.closing-input'));
-        totalSales += Math.max(opening - closing, 0) * price;
+        const totalStock = opening + receipt;
+        totalSales += Math.max(totalStock - closing, 0) * price;
         closingValue += closing * price;
     });
 
@@ -201,9 +266,11 @@ function focusNextProduct(input) {
     let nextInput;
 
     if (column === 'opening') {
-        nextInput = document.querySelector(`.sheet-input[data-row="${currentRow}"][data-col="closing"]`);
+        nextInput = document.querySelector(`.receipt-input[data-row="${currentRow}"]`);
+    } else if (column === 'receipt') {
+        nextInput = document.querySelector(`.closing-input[data-row="${currentRow}"]`);
     } else {
-        nextInput = document.querySelector(`.sheet-input[data-row="${currentRow + 1}"][data-col="opening"]`);
+        nextInput = document.querySelector(`.opening-input[data-row="${currentRow + 1}"]`);
     }
 
     if (nextInput) {

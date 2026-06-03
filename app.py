@@ -290,12 +290,15 @@ def build_today_shop_report(shop, report_date=None):
     for wine in wines:
         entry = stock_map.get(wine.id)
         if entry:
+            entry.total_stock = entry.opening_stock + entry.receipt
             entries.append(entry)
         else:
             entries.append(
                 SimpleNamespace(
                     wine=wine,
                     opening_stock=0,
+                    receipt=0,
+                    total_stock=0,
                     closing_stock=0,
                     sales_qty=0,
                     price=price_map.get(wine.id, 0.0),
@@ -304,6 +307,8 @@ def build_today_shop_report(shop, report_date=None):
             )
 
     total_opening = sum(entry.opening_stock for entry in entries)
+    total_receipt = sum(entry.receipt for entry in entries)
+    total_stock = sum(entry.total_stock for entry in entries)
     total_closing = sum(entry.closing_stock for entry in entries)
     total_units = sum(entry.sales_qty for entry in entries)
     total_sales = sum(float(entry.sales_amount) for entry in entries)
@@ -319,6 +324,8 @@ def build_today_shop_report(shop, report_date=None):
         "date": report_date,
         "entries": entries,
         "total_opening": total_opening,
+        "total_receipt": total_receipt,
+        "total_stock": total_stock,
         "total_closing": total_closing,
         "total_units": total_units,
         "total_sales": round(total_sales, 2),
@@ -417,13 +424,15 @@ def build_sales_report_pdf(title, report):
     row_height = 22
     table_width = 532
     columns = [
-        ("Wine", 185),
-        ("ML", 35),
-        ("Opening", 55),
-        ("Closing", 55),
-        ("Sold", 40),
-        ("Price INR", 78),
-        ("Sales INR", 84),
+        ("Wine", 140),
+        ("ML", 30),
+        ("Opening", 45),
+        ("Receipt", 45),
+        ("Total", 45),
+        ("Closing", 45),
+        ("Sold", 35),
+        ("Price INR", 65),
+        ("Sales INR", 70),
     ]
     entries = report["entries"]
     rows_per_first_page = 19
@@ -472,9 +481,10 @@ def build_sales_report_pdf(title, report):
                 row_top = y - row_height * (row_index + 1)
                 values = [
                     entry.wine.name,
-        
                     entry.wine.ml or "-",
                     entry.opening_stock,
+                    entry.receipt,
+                    entry.total_stock,
                     entry.closing_stock,
                     entry.sales_qty,
                     f"{float(entry.price):.2f}",
@@ -499,6 +509,8 @@ def build_sales_report_pdf(title, report):
             summary_y = top_y - 88
             summary_rows = [
                 ("Opening Qty", report["total_opening"]),
+                ("Receipt Qty", report["total_receipt"]),
+                ("Total Stock Qty", report["total_stock"]),
                 ("Closing Qty", report["total_closing"]),
                 ("Units Sold", report["total_units"]),
                 ("Total Sales INR", f"{report['total_sales']:.2f}"),
@@ -899,14 +911,16 @@ def owner_download_report():
     writer.writerow(["Address", shop.location or ""])
     writer.writerow(["Date", report["date"].isoformat()])
     writer.writerow([])
-    writer.writerow(["Wine", "Short Name", "ML", "Opening", "Closing", "Sold", "Price (INR)", "Sales Amount (INR)"])
+    writer.writerow(["Wine", "Short Name", "ML", "Opening", "Receipt", "Total", "Closing", "Sold", "Price (INR)", "Sales Amount (INR)"])
     for entry in report["entries"]:
         writer.writerow(
             [
                 entry.wine.name,
-    
+                entry.wine.short_name or "",
                 entry.wine.ml or "",
                 entry.opening_stock,
+                entry.receipt,
+                entry.total_stock,
                 entry.closing_stock,
                 entry.sales_qty,
                 f"{float(entry.price):.2f}",
@@ -922,6 +936,8 @@ def owner_download_report():
     writer.writerow([])
     writer.writerow(["Summary"])
     writer.writerow(["Opening Qty", report["total_opening"]])
+    writer.writerow(["Receipt Qty", report["total_receipt"]])
+    writer.writerow(["Total Stock Qty", report["total_stock"]])
     writer.writerow(["Closing Qty", report["total_closing"]])
     writer.writerow(["Units Sold", report["total_units"]])
     writer.writerow(["Total Sales (INR)", f"{report['total_sales']:.2f}"])
@@ -1473,12 +1489,14 @@ def daily_stock(shop_id):
         try:
             for wine in shop_wines:
                 opening_stock = int(request.form.get(f"opening_stock_{wine.id}") or 0)
+                receipt = int(request.form.get(f"receipt_{wine.id}") or 0)
                 closing_stock = int(request.form.get(f"closing_stock_{wine.id}") or 0)
-                if opening_stock < 0 or closing_stock < 0:
+                if opening_stock < 0 or receipt < 0 or closing_stock < 0:
                     raise ValueError
 
                 price_value = price_map.get(wine.id, 0.0)
-                sales_qty = max(opening_stock - closing_stock, 0)
+                total_stock = opening_stock + receipt
+                sales_qty = max(total_stock - closing_stock, 0)
                 sales_amount = round(price_value * sales_qty, 2)
 
                 stock_record = existing_records.get(wine.id)
@@ -1491,12 +1509,13 @@ def daily_stock(shop_id):
                     db.session.add(stock_record)
 
                 stock_record.opening_stock = opening_stock
+                stock_record.receipt = receipt
                 stock_record.closing_stock = closing_stock
                 stock_record.sales_qty = sales_qty
                 stock_record.price = price_value
                 stock_record.sales_amount = sales_amount
         except ValueError:
-            flash("Stock values must be zero or positive whole numbers", "warning")
+            flash("Stock and receipt values must be zero or positive whole numbers", "warning")
             return redirect(url_for("daily_stock", shop_id=shop_id, date=selected_date.isoformat()))
 
         db.session.commit()
@@ -1515,27 +1534,34 @@ def daily_stock(shop_id):
         previous_entry = previous_entry_map.get(wine.id)
         price_value = float(entry.price) if entry else price_map.get(wine.id, 0.0)
 
-        if entry and (entry.opening_stock > 0 or entry.closing_stock > 0):
+        if entry and (entry.opening_stock > 0 or entry.closing_stock > 0 or entry.receipt > 0):
             opening_stock = entry.opening_stock
+            receipt = entry.receipt
             closing_stock = entry.closing_stock
             sales_qty = entry.sales_qty
             sales_amount = float(entry.sales_amount)
         elif previous_entry:
             opening_stock = previous_entry.closing_stock
+            receipt = 0
             closing_stock = previous_entry.closing_stock
             sales_qty = 0
             sales_amount = 0.0
         else:
             opening_stock = 0
+            receipt = 0
             closing_stock = 0
             sales_qty = 0
             sales_amount = 0.0
+
+        total_stock = opening_stock + receipt
 
         daily_rows.append(
             {
                 "wine": wine,
                 "price": price_value,
                 "opening_stock": opening_stock,
+                "receipt": receipt,
+                "total_stock": total_stock,
                 "closing_stock": closing_stock,
                 "sales_qty": sales_qty,
                 "sales_amount": sales_amount,

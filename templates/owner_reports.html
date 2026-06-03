@@ -47,6 +47,14 @@
                 <span>{{ report.total_opening }}</span>
             </div>
             <div class="card metric-card">
+                <strong>Receipt Qty</strong>
+                <span>{{ report.total_receipt }}</span>
+            </div>
+            <div class="card metric-card">
+                <strong>Total Stock</strong>
+                <span>{{ report.total_stock }}</span>
+            </div>
+            <div class="card metric-card">
                 <strong>Closing Qty</strong>
                 <span>{{ report.total_closing }}</span>
             </div>
@@ -80,6 +88,8 @@
                         <th>Wine</th>
                         <th>ML</th>
                         <th>Opening</th>
+                        <th>Receipt</th>
+                        <th>Total</th>
                         <th>Closing</th>
                         <th>Sold</th>
                         <th>Price INR</th>
@@ -92,13 +102,15 @@
                         <td data-label="Wine">{{ entry.wine.name }}</td>
                         <td data-label="ML">{{ entry.wine.ml or "-" }}</td>
                         <td data-label="Opening">{{ entry.opening_stock }}</td>
+                        <td data-label="Receipt">{{ entry.receipt }}</td>
+                        <td data-label="Total">{{ entry.total_stock }}</td>
                         <td data-label="Closing">{{ entry.closing_stock }}</td>
                         <td data-label="Sold">{{ entry.sales_qty }}</td>
                         <td data-label="Price INR">{{ entry.price|inr }}</td>
                         <td data-label="Sales INR">{{ entry.sales_amount|inr }}</td>
                     </tr>
                 {% else %}
-                    <tr><td colspan="7">No sales entries found for today.</td></tr>
+                    <tr><td colspan="9">No sales entries found for today.</td></tr>
                 {% endfor %}
                 </tbody>
             </table>

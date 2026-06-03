@@ -67,6 +67,7 @@ class DailyStock(db.Model):
     wine_id = db.Column(db.Integer, db.ForeignKey("wine.id"), nullable=False)
     date = db.Column(db.Date, nullable=False)
     opening_stock = db.Column(db.Integer, nullable=False, default=0)
+    receipt = db.Column(db.Integer, nullable=False, default=0)
     closing_stock = db.Column(db.Integer, nullable=False, default=0)
     sales_qty = db.Column(db.Integer, nullable=False, default=0)
     price = db.Column(db.Numeric(10, 2), nullable=False, default=0.0)
