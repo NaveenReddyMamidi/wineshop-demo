@@ -63,6 +63,10 @@
                 <span>{{ report.total_expenses|inr }}</span>
             </div>
             <div class="card metric-card">
+                <strong>Total Hand Loans</strong>
+                <span>{{ report.total_hand_loans|inr }}</span>
+            </div>
+            <div class="card metric-card">
                 <strong>Net Sales</strong>
                 <span>{{ report.net_sales|inr }}</span>
             </div>
@@ -76,6 +80,7 @@
                     <p><strong>Date:</strong> {{ report.date }}</p>
                     <p><strong>Opening value:</strong> {{ report.opening_value|inr }}</p>
                     <p><strong>Closing value:</strong> {{ report.closing_value|inr }}</p>
+                    <p><strong>Previous day loan carry:</strong> {{ report.previous_hand_loans|inr }}</p>
                 </div>
             </div>
         </div>
@@ -133,6 +138,28 @@
                         </tr>
                     {% else %}
                         <tr><td colspan="2">No expenses recorded for this date.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <h3>Hand Loans</h3>
+        <div class="table-responsive">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Amount INR</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for loan in report.hand_loan_entries %}
+                        <tr>
+                            <td data-label="Name">{{ loan.name }}</td>
+                            <td data-label="Amount INR">{{ loan.amount|inr }}</td>
+                        </tr>
+                    {% else %}
+                        <tr><td colspan="2">No hand loans recorded for this date.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>

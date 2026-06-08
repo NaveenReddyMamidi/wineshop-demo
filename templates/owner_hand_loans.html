@@ -1,0 +1,152 @@
+﻿{% extends "base.html" %}
+{% block content %}
+<section>
+    <h2>Hand Loans</h2>
+    <div class="card" style="margin-bottom:1rem;">
+        <form method="get" action="{{ url_for('owner_hand_loans') }}">
+            <div class="row">
+                <div class="col-sm-6">
+                    <label for="shop_id">Select shop</label>
+                    <select id="shop_id" name="shop_id" required>
+                        <option value="">Choose shop</option>
+                        {% for shop in shops %}
+                            <option value="{{ shop.id }}" {% if selected_shop and selected_shop.id == shop.id %}selected{% endif %}>{{ shop.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-sm-6">
+                    <label for="date">Select date</label>
+                    <input type="date" id="date" name="date" value="{{ selected_date.isoformat() if selected_date else '' }}">
+                </div>
+            </div>
+            <div class="form-actions">
+                <button type="submit">Load hand loans</button>
+                <a class="button secondary" href="{{ url_for('owner_hand_loans') }}">Clear</a>
+            </div>
+        </form>
+    </div>
+
+    {% if selected_shop %}
+        <div class="card" style="margin-bottom:1rem;">
+            <h3>Add hand loan entries for {{ selected_shop.name }} on {{ selected_date.strftime('%d %b %Y') }}</h3>
+            <form method="post" action="{{ url_for('owner_hand_loans') }}">
+                <input type="hidden" name="shop_id" value="{{ selected_shop.id }}">
+                <input type="hidden" name="date" value="{{ selected_date.isoformat() }}">
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Amount (INR)</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="loan-rows">
+                            {% for index in range(5) %}
+                                <tr>
+                                    <td>
+                                        <input type="hidden" name="row_index" value="{{ index }}">
+                                        <input type="text" name="name_{{ index }}" placeholder="Loan name" onkeydown="handleLoanInputKeyDown(event)">
+                                    </td>
+                                    <td>
+                                        <input type="number" step="0.01" min="0" name="amount_{{ index }}" placeholder="0.00" onkeydown="handleLoanInputKeyDown(event)">
+                                    </td>
+                                    <td>
+                                        <button type="button" class="secondary" onclick="removeLoanRow(this)">Remove</button>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="form-actions">
+                    <button type="button" onclick="addLoanRow()">Add row</button>
+                    <button type="submit">Save hand loans</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="card">
+            <h3>Existing Hand Loans</h3>
+            <p><strong>Total hand loans:</strong> {{ total_hand_loans|inr }}</p>
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Amount</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for loan in loans %}
+                            <tr>
+                                <td data-label="Name">{{ loan.name }}</td>
+                                <td data-label="Amount">{{ loan.amount|inr }}</td>
+                                <td data-label="Action">
+                                    <form method="post" action="{{ url_for('delete_hand_loan', loan_id=loan.id) }}" style="display:inline;">
+                                        <button type="submit" class="secondary">Delete</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        {% else %}
+                            <tr><td colspan="3">No hand loans recorded for this shop and date.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    {% else %}
+        <div class="card">
+            <p>Select a shop and date to manage daily hand loan entries.</p>
+        </div>
+    {% endif %}
+</section>
+
+<script>
+    let loanRowIndex = 5;
+
+    function handleLoanInputKeyDown(event) {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            const inputs = Array.from(document.querySelectorAll('#loan-rows input:not([type="hidden"])'));
+            const currentIndex = inputs.indexOf(event.target);
+            if (currentIndex !== -1 && currentIndex < inputs.length - 1) {
+                inputs[currentIndex + 1].focus();
+            } else {
+                addLoanRow();
+                const newInputs = Array.from(document.querySelectorAll('#loan-rows input:not([type="hidden"])'));
+                if (newInputs.length > currentIndex + 1) {
+                    newInputs[currentIndex + 1].focus();
+                }
+            }
+        }
+    }
+
+    function addLoanRow() {
+        const tbody = document.getElementById('loan-rows');
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>
+                <input type="hidden" name="row_index" value="${loanRowIndex}">
+                <input type="text" name="name_${loanRowIndex}" placeholder="Loan name" onkeydown="handleLoanInputKeyDown(event)">
+            </td>
+            <td>
+                <input type="number" step="0.01" min="0" name="amount_${loanRowIndex}" placeholder="0.00" onkeydown="handleLoanInputKeyDown(event)">
+            </td>
+            <td>
+                <button type="button" class="secondary" onclick="removeLoanRow(this)">Remove</button>
+            </td>
+        `;
+        tbody.appendChild(row);
+        loanRowIndex += 1;
+    }
+
+    function removeLoanRow(button) {
+        const row = button.closest('tr');
+        if (row) {
+            row.remove();
+        }
+    }
+</script>
+{% endblock %}

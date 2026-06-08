@@ -8,7 +8,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import date, timedelta, datetime
-from models import db, User, Shop, Wine, WinePrice, DailyStock, ParcelEntry, Expense
+from models import db, User, Shop, Wine, WinePrice, DailyStock, ParcelEntry, Expense, HandLoan
 from reportlab.lib.pagesizes import letter, A4
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -316,6 +316,12 @@ def build_today_shop_report(shop, report_date=None):
     closing_value = sum(entry.closing_stock * float(entry.price) for entry in entries)
 
     expense_entries = Expense.query.filter_by(shop_id=shop.id, date=report_date).order_by(Expense.id).all()
+    hand_loan_entries = HandLoan.query.filter_by(shop_id=shop.id, date=report_date).order_by(HandLoan.id).all()
+    previous_hand_loan_total = round(
+        sum(float(loan.amount) for loan in HandLoan.query.filter_by(shop_id=shop.id, date=report_date - timedelta(days=1)).all()),
+        2,
+    )
+    total_hand_loans = round(sum(float(loan.amount) for loan in hand_loan_entries), 2)
     total_expenses = round(sum(float(expense.amount) for expense in expense_entries), 2)
     net_sales = round(total_sales - total_expenses, 2)
 
@@ -331,9 +337,12 @@ def build_today_shop_report(shop, report_date=None):
         "total_sales": round(total_sales, 2),
         "total_expenses": total_expenses,
         "net_sales": net_sales,
-        "opening_value": round(opening_value, 2),
-        "closing_value": round(closing_value, 2),
+        "opening_value": round(opening_value + previous_hand_loan_total, 2),
+        "closing_value": round(closing_value + total_hand_loans, 2),
         "expense_entries": expense_entries,
+        "hand_loan_entries": hand_loan_entries,
+        "total_hand_loans": total_hand_loans,
+        "previous_hand_loans": previous_hand_loan_total,
     }
 
 
@@ -515,6 +524,7 @@ def build_sales_report_pdf(title, report):
                 ("Units Sold", report["total_units"]),
                 ("Total Sales INR", f"{report['total_sales']:.2f}"),
                 ("Total Expenses INR", f"{report['total_expenses']:.2f}"),
+                ("Total Hand Loans INR", f"{report.get('total_hand_loans', 0.0):.2f}"),
                 ("Net Sales INR", f"{report['net_sales']:.2f}"),
                 ("Opening Value INR", f"{report['opening_value']:.2f}"),
                 ("Closing Value INR", f"{report['closing_value']:.2f}"),
@@ -821,6 +831,117 @@ def owner_expenses():
     )
 
 
+@app.route("/owner/hand-loans", methods=["GET", "POST"])
+@login_required
+def owner_hand_loans():
+    if not owner_required():
+        flash("Permission denied", "danger")
+        return redirect(url_for("dashboard"))
+
+    shops = Shop.query.order_by(Shop.name).all()
+    selected_shop = None
+    selected_date = date.today()
+    shop_id = request.args.get("shop_id") or request.form.get("shop_id")
+    report_date_str = request.args.get("date") or request.form.get("date")
+
+    try:
+        selected_date = datetime.strptime(report_date_str, "%Y-%m-%d").date() if report_date_str else date.today()
+    except (ValueError, TypeError):
+        selected_date = date.today()
+
+    if shop_id:
+        try:
+            selected_shop = Shop.query.get_or_404(int(shop_id))
+        except (ValueError, TypeError):
+            flash("Invalid shop selected", "warning")
+            selected_shop = None
+
+    if request.method == "POST":
+        if not selected_shop:
+            flash("Select a shop before saving hand loans", "warning")
+            return redirect(url_for("owner_hand_loans"))
+
+        row_indexes = request.form.getlist("row_index")
+        created_count = 0
+        try:
+            if row_indexes:
+                for row_index in row_indexes:
+                    name = request.form.get(f"name_{row_index}", "").strip()
+                    amount_text = request.form.get(f"amount_{row_index}", "").strip()
+                    if not name or not amount_text:
+                        continue
+                    amount = float(amount_text)
+                    if amount < 0:
+                        raise ValueError
+                    loan = HandLoan(
+                        shop_id=selected_shop.id,
+                        date=selected_date,
+                        name=name,
+                        amount=round(amount, 2),
+                    )
+                    db.session.add(loan)
+                    created_count += 1
+            else:
+                name = request.form.get("name", "").strip()
+                amount_text = request.form.get("amount", "").strip()
+                if not name or not amount_text:
+                    flash("Loan name and amount are required", "warning")
+                    return redirect(url_for("owner_hand_loans", shop_id=selected_shop.id, date=selected_date.isoformat()))
+                amount = float(amount_text)
+                if amount < 0:
+                    raise ValueError
+                loan = HandLoan(
+                    shop_id=selected_shop.id,
+                    date=selected_date,
+                    name=name,
+                    amount=round(amount, 2),
+                )
+                db.session.add(loan)
+                created_count = 1
+        except ValueError:
+            db.session.rollback()
+            flash("Loan amount must be a non-negative number", "warning")
+            return redirect(url_for("owner_hand_loans", shop_id=selected_shop.id, date=selected_date.isoformat()))
+
+        if created_count:
+            db.session.commit()
+            flash(f"{created_count} hand loan entry{'ies' if created_count != 1 else 'y'} added", "success")
+        else:
+            flash("Enter at least one loan name and amount", "warning")
+        return redirect(url_for("owner_hand_loans", shop_id=selected_shop.id, date=selected_date.isoformat()))
+
+    loans = []
+    total_hand_loans = 0.0
+    if selected_shop:
+        loans = HandLoan.query.filter_by(shop_id=selected_shop.id, date=selected_date).order_by(HandLoan.id).all()
+        total_hand_loans = round(sum(float(loan.amount) for loan in loans), 2)
+
+    return render_template(
+        "owner_hand_loans.html",
+        shops=shops,
+        selected_shop=selected_shop,
+        selected_date=selected_date,
+        loans=loans,
+        total_hand_loans=total_hand_loans,
+    )
+
+
+@app.route("/owner/hand-loans/delete/<int:loan_id>", methods=["POST"])
+@login_required
+def delete_hand_loan(loan_id):
+    if not owner_required():
+        flash("Permission denied", "danger")
+        return redirect(url_for("dashboard"))
+
+    loan = HandLoan.query.get_or_404(loan_id)
+    shop_id = loan.shop_id
+    loan_date = loan.date.isoformat()
+    db.session.delete(loan)
+    db.session.commit()
+    flash(f"Hand loan '{loan.name}' deleted", "success")
+    return redirect(url_for("owner_hand_loans", shop_id=shop_id, date=loan_date))
+
+
 @app.route("/owner/expenses/delete/<int:expense_id>", methods=["POST"])
 @login_required
 def delete_expense(expense_id):
@@ -911,12 +1032,11 @@ def owner_download_report():
     writer.writerow(["Address", shop.location or ""])
     writer.writerow(["Date", report["date"].isoformat()])
     writer.writerow([])
-    writer.writerow(["Wine", "Short Name", "ML", "Opening", "Receipt", "Total", "Closing", "Sold", "Price (INR)", "Sales Amount (INR)"])
+    writer.writerow(["Wine", "ML", "Opening", "Receipt", "Total", "Closing", "Sold", "Price (INR)", "Sales Amount (INR)"])
     for entry in report["entries"]:
         writer.writerow(
             [
                 entry.wine.name,
-                entry.wine.short_name or "",
                 entry.wine.ml or "",
                 entry.opening_stock,
                 entry.receipt,
@@ -933,6 +1053,12 @@ def owner_download_report():
         writer.writerow(["Name", "Amount (INR)"])
         for expense in report["expense_entries"]:
             writer.writerow([expense.name, f"{float(expense.amount):.2f}"])
+    if report.get("hand_loan_entries"):
+        writer.writerow([])
+        writer.writerow(["Hand Loans"])
+        writer.writerow(["Name", "Amount (INR)"])
+        for loan in report["hand_loan_entries"]:
+            writer.writerow([loan.name, f"{float(loan.amount):.2f}"])
     writer.writerow([])
     writer.writerow(["Summary"])
     writer.writerow(["Opening Qty", report["total_opening"]])
@@ -942,6 +1068,7 @@ def owner_download_report():
     writer.writerow(["Units Sold", report["total_units"]])
     writer.writerow(["Total Sales (INR)", f"{report['total_sales']:.2f}"])
     writer.writerow(["Total Expenses (INR)", f"{report['total_expenses']:.2f}"])
+    writer.writerow(["Total Hand Loans (INR)", f"{report['total_hand_loans']:.2f}"])
     writer.writerow(["Net Sales (INR)", f"{report['net_sales']:.2f}"])
     writer.writerow(["Opening Value (INR)", f"{report['opening_value']:.2f}"])
     writer.writerow(["Closing Value (INR)", f"{report['closing_value']:.2f}"])
@@ -1478,13 +1605,19 @@ def daily_stock(shop_id):
     
     shop_wines = Wine.query.filter_by(shop_id=shop.id).order_by(Wine.id).all()
     price_records = WinePrice.query.filter_by(shop_id=shop.id).all()
-    price_map = {price.wine_id: float(price.price) for price in price_records}
+    price_record_map = {price.wine_id: price for price in price_records}
+    price_map = {wine_id: float(price.price) for wine_id, price in price_record_map.items()}
 
     if request.method == "POST":
         existing_records = {
             record.wine_id: record
             for record in DailyStock.query.filter_by(shop_id=shop.id, date=selected_date).all()
         }
+
+        new_daily_stock = []
+        update_daily_stock = []
+        new_price_records = []
+        update_price_records = []
 
         try:
             for wine in shop_wines:
@@ -1495,28 +1628,68 @@ def daily_stock(shop_id):
                     raise ValueError
 
                 price_value = price_map.get(wine.id, 0.0)
+                if current_user.role == "owner":
+                    price_text = request.form.get(f"price_{wine.id}")
+                    if price_text is not None and price_text != "":
+                        new_price = float(price_text)
+                        if new_price < 0:
+                            raise ValueError
+                        price_value = new_price
+                        price_record = price_record_map.get(wine.id)
+                        if not price_record:
+                            new_price_records.append(
+                                WinePrice(shop_id=shop.id, wine_id=wine.id, price=price_value)
+                            )
+                            price_record_map[wine.id] = True
+                        else:
+                            if float(price_record.price) != price_value:
+                                update_price_records.append(
+                                    {"id": price_record.id, "price": price_value}
+                                )
+
                 total_stock = opening_stock + receipt
                 sales_qty = max(total_stock - closing_stock, 0)
                 sales_amount = round(price_value * sales_qty, 2)
 
                 stock_record = existing_records.get(wine.id)
                 if not stock_record:
-                    stock_record = DailyStock(
-                        shop_id=shop.id,
-                        wine_id=wine.id,
-                        date=selected_date,
+                    new_daily_stock.append(
+                        DailyStock(
+                            shop_id=shop.id,
+                            wine_id=wine.id,
+                            date=selected_date,
+                            opening_stock=opening_stock,
+                            receipt=receipt,
+                            closing_stock=closing_stock,
+                            sales_qty=sales_qty,
+                            price=price_value,
+                            sales_amount=sales_amount,
+                        )
                     )
-                    db.session.add(stock_record)
-
-                stock_record.opening_stock = opening_stock
-                stock_record.receipt = receipt
-                stock_record.closing_stock = closing_stock
-                stock_record.sales_qty = sales_qty
-                stock_record.price = price_value
-                stock_record.sales_amount = sales_amount
+                else:
+                    update_daily_stock.append(
+                        {
+                            "id": stock_record.id,
+                            "opening_stock": opening_stock,
+                            "receipt": receipt,
+                            "closing_stock": closing_stock,
+                            "sales_qty": sales_qty,
+                            "price": price_value,
+                            "sales_amount": sales_amount,
+                        }
+                    )
         except ValueError:
             flash("Stock and receipt values must be zero or positive whole numbers", "warning")
             return redirect(url_for("daily_stock", shop_id=shop_id, date=selected_date.isoformat()))
+
+        if new_price_records:
+            db.session.bulk_save_objects(new_price_records)
+        if update_price_records:
+            db.session.bulk_update_mappings(WinePrice, update_price_records)
+        if new_daily_stock:
+            db.session.bulk_save_objects(new_daily_stock)
+        if update_daily_stock:
+            db.session.bulk_update_mappings(DailyStock, update_daily_stock)
 
         db.session.commit()
         flash("Daily stock sheet saved", "success")
@@ -1527,6 +1700,8 @@ def daily_stock(shop_id):
     previous_date = selected_date - timedelta(days=1)
     previous_entries = DailyStock.query.filter_by(shop_id=shop.id, date=previous_date).all()
     previous_entry_map = {entry.wine_id: entry for entry in previous_entries}
+    loan_entries = HandLoan.query.filter_by(shop_id=shop.id, date=selected_date).order_by(HandLoan.id).all()
+    loan_total = round(sum(float(entry.amount) for entry in loan_entries), 2)
 
     daily_rows = []
     for wine in shop_wines:
@@ -1569,7 +1744,7 @@ def daily_stock(shop_id):
         )
 
     total_sales = sum(row["sales_amount"] for row in daily_rows)
-    closing_inventory_value = sum(row["closing_stock"] * row["price"] for row in daily_rows)
+    closing_inventory_value = sum(row["closing_stock"] * row["price"] for row in daily_rows) + loan_total
 
     return render_template(
         "daily_stock.html",
@@ -1578,6 +1753,8 @@ def daily_stock(shop_id):
         total_sales=total_sales,
         closing_inventory_value=closing_inventory_value,
         selected_date=selected_date,
+        loan_entries=loan_entries,
+        loan_total=loan_total,
     )
 
 
@@ -1726,3 +1903,4 @@ def create_shop():
 
 if __name__ == "__main__":
     app.run(debug=True)
+

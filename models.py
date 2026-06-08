@@ -30,6 +30,7 @@ class Shop(db.Model):
     workers = db.relationship("User", secondary=shop_workers, back_populates="shops")
     prices = db.relationship("WinePrice", back_populates="shop", cascade="all, delete-orphan")
     expenses = db.relationship("Expense", back_populates="shop", cascade="all, delete-orphan")
+    hand_loans = db.relationship("HandLoan", back_populates="shop", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<Shop {self.name}>"
@@ -109,5 +110,26 @@ class Expense(db.Model):
 
     shop = db.relationship("Shop", back_populates="expenses")
 
+    __table_args__ = (
+        db.Index("ix_expense_shop_date", "shop_id", "date"),
+    )
+
     def __repr__(self):
         return f"<Expense shop={self.shop_id} date={self.date} name={self.name} amount={self.amount}>"
+
+
+class HandLoan(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    shop_id = db.Column(db.Integer, db.ForeignKey("shop.id"), nullable=False)
+    date = db.Column(db.Date, nullable=False)
+    name = db.Column(db.String(160), nullable=False)
+    amount = db.Column(db.Numeric(10, 2), nullable=False, default=0.0)
+
+    shop = db.relationship("Shop", back_populates="hand_loans")
+
+    __table_args__ = (
+        db.Index("ix_handloan_shop_date", "shop_id", "date"),
+    )
+
+    def __repr__(self):
+        return f"<HandLoan shop={self.shop_id} date={self.date} name={self.name} amount={self.amount}>"

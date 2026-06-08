@@ -21,7 +21,11 @@
             <div class="card">
                 <h3>Summary</h3>
                 <p><strong>Total Sales INR:</strong> <span id="total-sales">{{ total_sales|inr }}</span></p>
+                <p><strong>Hand Loan Total:</strong> <span id="loan-total">{{ loan_total|inr }}</span></p>
                 <p><strong>Closing inventory value:</strong> <span id="closing-value">{{ closing_inventory_value|inr }}</span></p>
+                {% if current_user.role == 'owner' %}
+                    <a class="button secondary" href="{{ url_for('owner_hand_loans', shop_id=shop.id, date=selected_date.isoformat()) }}">Manage Hand Loans</a>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -94,7 +98,23 @@
                                 >
                             </td>
                             <td data-label="Sold" class="sold-cell">{{ row.sales_qty }}</td>
-                            <td data-label="Price INR">{{ row.price|inr }}</td>
+                            <td data-label="Price INR">
+                                {% if current_user.role == 'owner' %}
+                                    <input
+                                        class="sheet-input price-input"
+                                        type="number"
+                                        name="price_{{ row.wine.id }}"
+                                        min="0"
+                                        step="0.01"
+                                        value="{{ '%.2f'|format(row.price) }}"
+                                        inputmode="decimal"
+                                        data-row="{{ loop.index0 }}"
+                                        data-col="price"
+                                    >
+                                {% else %}
+                                    {{ row.price|inr }}
+                                {% endif %}
+                            </td>
                             <td data-label="Sales INR" class="sales-cell">{{ row.sales_amount|inr }}</td>
                         </tr>
                     {% else %}
@@ -210,7 +230,17 @@ const moneyFormatter = new Intl.NumberFormat('en-IN', {
 });
 
 const sheetForm = document.getElementById('daily-stock-form');
-const rows = Array.from(document.querySelectorAll('.stock-sheet tbody tr[data-price]'));
+const rowElements = Array.from(document.querySelectorAll('.stock-sheet tbody tr[data-price]'));
+const rows = rowElements.map(row => ({
+    row,
+    openingInput: row.querySelector('.opening-input'),
+    receiptInput: row.querySelector('.receipt-input'),
+    closingInput: row.querySelector('.closing-input'),
+    priceInput: row.querySelector('.price-input'),
+    totalStockCell: row.querySelector('.total-stock-cell'),
+    soldCell: row.querySelector('.sold-cell'),
+    salesCell: row.querySelector('.sales-cell'),
+}));
 
 function cleanStockValue(input) {
     if (!input) {
@@ -220,11 +250,12 @@ function cleanStockValue(input) {
     return Number.isFinite(value) && value >= 0 ? value : 0;
 }
 
-function updateRow(row) {
-    const openingInput = row.querySelector('.opening-input');
-    const receiptInput = row.querySelector('.receipt-input');
-    const closingInput = row.querySelector('.closing-input');
-    const price = parseFloat(row.dataset.price) || 0;
+function updateRow(rowData) {
+    const { row, openingInput, receiptInput, closingInput, priceInput, totalStockCell, soldCell, salesCell } = rowData;
+    const price = parseFloat(priceInput ? priceInput.value : row.dataset.price) || 0;
+    if (priceInput) {
+        row.dataset.price = price.toFixed(2);
+    }
     const opening = cleanStockValue(openingInput);
     const receipt = cleanStockValue(receiptInput);
     const closing = cleanStockValue(closingInput);
@@ -232,20 +263,20 @@ function updateRow(row) {
     const sold = Math.max(totalStock - closing, 0);
     const sales = sold * price;
 
-    row.querySelector('.total-stock-cell').textContent = totalStock;
-    row.querySelector('.sold-cell').textContent = sold;
-    row.querySelector('.sales-cell').textContent = moneyFormatter.format(sales);
+    totalStockCell.textContent = totalStock;
+    soldCell.textContent = sold;
+    salesCell.textContent = moneyFormatter.format(sales);
 }
 
 function updateSummary() {
     let totalSales = 0;
     let closingValue = 0;
 
-    rows.forEach(row => {
+    rows.forEach(({ row, openingInput, receiptInput, closingInput }) => {
         const price = parseFloat(row.dataset.price) || 0;
-        const opening = cleanStockValue(row.querySelector('.opening-input'));
-        const receipt = cleanStockValue(row.querySelector('.receipt-input'));
-        const closing = cleanStockValue(row.querySelector('.closing-input'));
+        const opening = cleanStockValue(openingInput);
+        const receipt = cleanStockValue(receiptInput);
+        const closing = cleanStockValue(closingInput);
         const totalStock = opening + receipt;
         totalSales += Math.max(totalStock - closing, 0) * price;
         closingValue += closing * price;
@@ -258,6 +289,17 @@ function updateSummary() {
 function updateSheet() {
     rows.forEach(updateRow);
     updateSummary();
+}
+
+let updateScheduled = false;
+function scheduleUpdateSheet() {
+    if (!updateScheduled) {
+        updateScheduled = true;
+        requestAnimationFrame(() => {
+            updateSheet();
+            updateScheduled = false;
+        });
+    }
 }
 
 function focusNextProduct(input) {
@@ -281,18 +323,23 @@ function focusNextProduct(input) {
     }
 }
 
-document.querySelectorAll('.sheet-input').forEach(input => {
-    input.addEventListener('input', updateSheet);
-    input.addEventListener('keydown', event => {
-        if (event.key === 'Enter') {
-            event.preventDefault();
-            focusNextProduct(input);
-        }
+rows.forEach(({ openingInput, receiptInput, closingInput, priceInput }) => {
+    [openingInput, receiptInput, closingInput, priceInput].forEach(input => {
+        if (!input) return;
+        input.addEventListener('input', scheduleUpdateSheet);
+        input.addEventListener('keydown', event => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                focusNextProduct(input);
+            }
+        });
     });
 });
 
 sheetForm.addEventListener('reset', () => {
-    setTimeout(updateSheet, 0);
+    setTimeout(() => {
+        updateSheet();
+    }, 0);
 });
 
 updateSheet();
